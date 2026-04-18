@@ -2,6 +2,7 @@ package core
 
 import (
 	"Excnahge-Cacher/api"
+	"log"
 	"sync"
 	"time"
 )
@@ -24,12 +25,16 @@ func NewCache(handler *api.APIHandler) (*Cache, error) {
 	cache := &Cache{
 		data:       make(map[string]CacheItem),
 		apiHandler: handler,
+		stop:       make(chan struct{}),
 	}
 	cache.StartCleanupWorker(30 * time.Second)
-	err := cache.GenerateRates()
-	if err != nil {
-		return cache, err
-	}
+	go func() {
+		time.Sleep(1 * time.Second)
+		err := cache.GenerateRates()
+		if err != nil {
+			log.Printf("Warning: failed to preload rates: %v", err)
+		}
+	}()
 
 	return cache, nil
 }
@@ -37,12 +42,14 @@ func NewCache(handler *api.APIHandler) (*Cache, error) {
 func (c *Cache) StartCleanupWorker(interval time.Duration) {
 	ticker := time.NewTicker(interval)
 	go func() {
-		select {
-		case <-ticker.C:
-			c.cleanup()
-		case <-c.stop:
-			ticker.Stop()
-			return
+		for {
+			select {
+			case <-ticker.C:
+				c.cleanup()
+			case <-c.stop:
+				ticker.Stop()
+				return
+			}
 		}
 	}()
 }
@@ -64,8 +71,8 @@ func (c *Cache) Stop() {
 }
 
 func (c *Cache) GenerateRates() error {
-	c.mu.Lock()
-	defer c.mu.Unlock()
+	//c.mu.Lock()
+	//defer c.mu.Unlock()
 	resp, err := c.apiHandler.GetAllCourses()
 	if err != nil {
 		return err
